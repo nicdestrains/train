@@ -20,6 +20,11 @@ Runs entirely on GitHub Actions' cron, so nothing needs to stay on locally.
 4. The GitHub Actions workflow commits the updated `state.json` back to
    the repo after each run, since Actions runners don't persist disk
    between runs.
+5. A second workflow sends a weekly heartbeat message (`weekly_status.py`)
+   so you get a periodic confirmation that the notifier is still running,
+   independent of whether a matching train has actually shown up. It does
+   a live RTT fetch and reports how many matches were spotted in the last
+   7 days, so a broken RTT/Twilio connection shows up even in a quiet week.
 
 ## Setup
 
@@ -67,6 +72,20 @@ schedule:
 
 Adjust the cron expression to taste (it runs in UTC). You can also trigger
 a run manually from the Actions tab via `workflow_dispatch`.
+
+The weekly heartbeat (`.github/workflows/weekly-status.yml`) runs Sundays
+at 08:00 UTC:
+
+```yaml
+schedule:
+  - cron: "0 8 * * 0"
+```
+
+GitHub Actions cron only fires on its schedule going forward — it won't
+retroactively run for "today" just because the workflow was just added.
+To get today's confirmation immediately, open the **Actions** tab →
+**Weekly Notifier Status Check** → **Run workflow** to trigger it manually
+via `workflow_dispatch`; after that it'll run weekly on its own.
 
 ## Local testing
 
