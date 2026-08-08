@@ -1,9 +1,9 @@
-"""Read/write helpers for docs/data.json, the file the GitHub Pages
+"""Read/write helpers for data.json, the file the GitHub Pages
 dashboard fetches and displays."""
 import json
 from pathlib import Path
 
-DATA_FILE = Path(__file__).parent / "docs" / "data.json"
+DATA_FILE = Path(__file__).parent / "data.json"
 
 _EMPTY = {
     "last_checked": None,

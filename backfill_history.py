@@ -2,7 +2,7 @@
 """
 One-off historical backfill: queries the RTT API for each day over the past
 ~6 months at Queens Road Peckham, checks for any service also calling at
-Tattenham Corner, and seeds docs/data.json's history with any matches found.
+Tattenham Corner, and seeds data.json's history with any matches found.
 
 Run manually - this is NOT part of the recurring polling schedule, and it
 never touches the "last_checked" / "status" fields (those only reflect the

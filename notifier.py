@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Poll Realtime Trains for the Queens Road Peckham departure board and record
-any service calling at Tattenham Corner in docs/data.json, which the GitHub
+any service calling at Tattenham Corner in data.json, which the GitHub
 Pages dashboard reads and displays.
 
 Credentials are read from environment variables so they can be injected as
