@@ -1,80 +1,44 @@
 #!/usr/bin/env python3
 """
-Poll Realtime Trains for the Queens Road Peckham departure board and send a
-WhatsApp/SMS alert (via Twilio) the first time a service calling at or
-terminating at Tattenham Corner shows up.
+Poll Realtime Trains for the Queens Road Peckham departure board and record
+any service calling at Tattenham Corner in docs/data.json, which the GitHub
+Pages dashboard reads and displays.
 
 Credentials are read from environment variables so they can be injected as
 GitHub Actions secrets:
 
-  RTT_USERNAME        Realtime Trains API username (api.rtt.io)
-  RTT_PASSWORD        Realtime Trains API password
-  TWILIO_ACCOUNT_SID  Twilio account SID
-  TWILIO_AUTH_TOKEN   Twilio auth token
-  TWILIO_FROM_NUMBER  Sending number, e.g. "whatsapp:+14155238886" or "+44..."
-  TWILIO_TO_NUMBER    Your number, in the same format as TWILIO_FROM_NUMBER
+  RTT_USERNAME  Realtime Trains API username (api.rtt.io)
+  RTT_PASSWORD  Realtime Trains API password
 """
-import json
 import sys
-from datetime import date, timedelta
-from pathlib import Path
+from datetime import date, datetime, timezone
 
 import requests
 
-from rtt_client import (
-    calls_at_target,
-    fetch_departure_board,
-    fetch_service_detail,
-    rtt_auth,
-    send_message,
-)
-
-STATE_FILE = Path(__file__).parent / "state.json"
-STATE_RETENTION_DAYS = 3
+from data_store import load_data, save_data
+from rtt_client import departure_time, fetch_departure_board, matches_target, rtt_auth
 
 
-def load_state() -> dict:
-    if not STATE_FILE.exists():
-        return {"checked": [], "alerted": []}
-    with STATE_FILE.open() as f:
-        data = json.load(f)
-    data.setdefault("checked", [])
-    data.setdefault("alerted", [])
-    return data
-
-
-def save_state(state: dict) -> None:
-    cutoff = (date.today() - timedelta(days=STATE_RETENTION_DAYS)).isoformat()
-    for key in ("checked", "alerted"):
-        state[key] = [entry for entry in state[key] if run_date_of(entry) >= cutoff]
-    with STATE_FILE.open("w") as f:
-        json.dump(state, f, indent=2, sort_keys=True)
-        f.write("\n")
-
-
-def run_date_of(service_key: str) -> str:
-    # service_key is "<serviceUid>_<runDate>"; runDate is an ISO date so
-    # string comparison against another ISO date works for the cutoff check.
-    return service_key.rsplit("_", 1)[-1]
-
-
-def send_alert(service_uid: str, detail: dict) -> None:
-    origin = detail.get("locations", [{}])[0].get("description", "Queens Road Peckham")
-    departure = detail.get("locations", [{}])[0].get("gbttBookedDeparture", "?")
-    body = (
-        f"Train alert: a service to Tattenham Corner is running from "
-        f"{origin} today, departing {departure[:2]}:{departure[2:]}. "
-        f"(Service {service_uid})"
-    )
-    send_message(body)
-    print(f"Alert sent for {service_uid}: {body}")
+def compute_status(history: list) -> dict:
+    today = date.today().isoformat()
+    todays_times = sorted(h["time"] for h in history if h["date"] == today)
+    if todays_times:
+        return {
+            "spotted_today": True,
+            "time": todays_times[0],
+            "message": f"\U0001f682 Train spotted at {todays_times[0]}",
+        }
+    return {
+        "spotted_today": False,
+        "time": None,
+        "message": "No unscheduled train currently spotted",
+    }
 
 
 def main() -> int:
     auth = rtt_auth()
-    state = load_state()
-    checked = set(state["checked"])
-    alerted = set(state["alerted"])
+    data = load_data()
+    existing_keys = {(h["date"], h["service_uid"]) for h in data["history"]}
 
     try:
         services = fetch_departure_board(auth)
@@ -85,31 +49,28 @@ def main() -> int:
     for service in services:
         service_uid = service.get("serviceUid")
         run_date = service.get("runDate")
-        if not service_uid or not run_date:
+        if not service_uid or not run_date or not matches_target(service):
             continue
 
-        key = f"{service_uid}_{run_date}"
-        if key in checked:
+        key = (run_date, service_uid)
+        if key in existing_keys:
             continue
 
-        try:
-            detail = fetch_service_detail(auth, service_uid, run_date)
-        except requests.RequestException as exc:
-            print(f"Failed to fetch detail for {key}: {exc}", file=sys.stderr)
-            continue
+        data["history"].append(
+            {
+                "date": run_date,
+                "time": departure_time(service),
+                "service_uid": service_uid,
+            }
+        )
+        existing_keys.add(key)
+        print(f"New match: {service_uid} on {run_date}")
 
-        checked.add(key)
+    data["history"].sort(key=lambda h: (h["date"], h["time"]), reverse=True)
+    data["status"] = compute_status(data["history"])
+    data["last_checked"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-        if calls_at_target(detail) and key not in alerted:
-            try:
-                send_alert(service_uid, detail)
-                alerted.add(key)
-            except Exception as exc:
-                print(f"Failed to send alert for {key}: {exc}", file=sys.stderr)
-
-    state["checked"] = sorted(checked)
-    state["alerted"] = sorted(alerted)
-    save_state(state)
+    save_data(data)
     return 0
 
 
