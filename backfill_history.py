@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 One-off historical backfill: queries the RTT API for each day over the past
-~6 months at Queens Road Peckham, checks for any service also calling at
+14 days at Queens Road Peckham, checks for any service also calling at
 Tattenham Corner, and seeds data.json's history with any matches found.
 
 Run manually - this is NOT part of the recurring polling schedule, and it
@@ -19,7 +19,7 @@ import requests
 from data_store import load_data, save_data
 from rtt_client import departure_time, fetch_departure_board, matches_target, rtt_auth
 
-BACKFILL_DAYS = 183  # roughly 6 months
+BACKFILL_DAYS = 14
 
 
 def main() -> int:

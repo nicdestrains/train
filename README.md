@@ -73,7 +73,7 @@ a run manually from the Actions tab via `workflow_dispatch`.
 ### 5. One-off historical backfill
 
 `backfill_history.py` queries RTT's dated search endpoint for each day
-over the last ~6 months and seeds `data.json` with any Tattenham
+over the last 14 days and seeds `data.json` with any Tattenham
 Corner matches it finds. It's deliberately **not** part of the recurring
 schedule and never touches `last_checked`/`status` (those only reflect the
 live poller).

@@ -2,7 +2,7 @@ name: Backfill Historical Data (manual)
 
 # Manual-only - this deliberately has no `schedule:` trigger. Run it once
 # from the Actions tab to seed data.json with matches from the last
-# ~6 months; re-running later is safe (existing entries are skipped).
+# 14 days; re-running later is safe (existing entries are skipped).
 on:
   workflow_dispatch: {}
 
