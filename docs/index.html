@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Peckham → Tattenham Corner Watch</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card-bg: #ffffff;
+    --text: #1a1d23;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #1d4ed8;
+    --spotted-bg: #ecfdf5;
+    --spotted-border: #10b981;
+    --spotted-text: #065f46;
+    --idle-bg: #f3f4f6;
+    --idle-border: #d1d5db;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card-bg: #1a1d23;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #2a2e37;
+      --accent: #60a5fa;
+      --spotted-bg: #052e22;
+      --spotted-border: #10b981;
+      --spotted-text: #6ee7b7;
+      --idle-bg: #1f2329;
+      --idle-border: #374151;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1rem 4rem;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin: 0 0 0.25rem;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin: 0 0 1.5rem;
+    font-size: 0.95rem;
+  }
+  .status-card {
+    border-radius: 12px;
+    border: 1px solid var(--idle-border);
+    background: var(--idle-bg);
+    padding: 1.25rem 1.5rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .status-card.spotted {
+    background: var(--spotted-bg);
+    border-color: var(--spotted-border);
+    color: var(--spotted-text);
+  }
+  .last-checked {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0 0 2rem;
+  }
+  h2 {
+    font-size: 1.05rem;
+    margin: 0 0 0.75rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.92rem;
+  }
+  th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  .empty {
+    color: var(--muted);
+    font-style: italic;
+    padding: 1rem 0;
+  }
+  code {
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Peckham → Tattenham Corner Watch</h1>
+  <p class="subtitle">Watching for the rare unscheduled direct service from Queens Road Peckham to Tattenham Corner.</p>
+
+  <div id="status-card" class="status-card">Loading…</div>
+  <p id="last-checked" class="last-checked"></p>
+
+  <h2>Sighting history</h2>
+  <table>
+    <thead>
+      <tr><th>Date</th><th>Time</th><th>Service</th></tr>
+    </thead>
+    <tbody id="history-body">
+      <tr><td colspan="3" class="empty">Loading…</td></tr>
+    </tbody>
+  </table>
+</main>
+
+<script>
+  function formatLastChecked(iso) {
+    if (!iso) return "Never checked yet.";
+    const d = new Date(iso);
+    return "Last checked: " + d.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
+
+  fetch("data.json?t=" + Date.now())
+    .then((r) => r.json())
+    .then((data) => {
+      const statusEl = document.getElementById("status-card");
+      statusEl.textContent = data.status.message;
+      statusEl.classList.toggle("spotted", !!data.status.spotted_today);
+
+      document.getElementById("last-checked").textContent = formatLastChecked(data.last_checked);
+
+      const body = document.getElementById("history-body");
+      body.innerHTML = "";
+      if (!data.history.length) {
+        body.innerHTML = '<tr><td colspan="3" class="empty">No sightings recorded yet.</td></tr>';
+        return;
+      }
+      for (const entry of data.history) {
+        const row = document.createElement("tr");
+        row.innerHTML =
+          "<td>" + entry.date + "</td>" +
+          "<td>" + entry.time + "</td>" +
+          "<td><code>" + entry.service_uid + "</code></td>";
+        body.appendChild(row);
+      }
+    })
+    .catch((err) => {
+      document.getElementById("status-card").textContent = "Couldn't load status data.";
+      document.getElementById("last-checked").textContent = "";
+      document.getElementById("history-body").innerHTML =
+        '<tr><td colspan="3" class="empty">Failed to load history.</td></tr>';
+      console.error(err);
+    });
+</script>
+</body>
+</html>

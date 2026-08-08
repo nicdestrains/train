@@ -1,2 +1,1 @@
 requests>=2.31,<3
-twilio>=9.0,<10

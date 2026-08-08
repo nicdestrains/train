@@ -1,30 +1,29 @@
-# Peckham → Tattenham Corner Notifier
+# Peckham → Tattenham Corner Watch
 
 Watches the Queens Road Peckham departure board via the
-[Realtime Trains API](https://api.rtt.io) and sends a WhatsApp/SMS alert
-(via Twilio) the first time it spots a service that calls at or terminates
-at Tattenham Corner — a rare, unscheduled direct working on this line.
+[Realtime Trains API](https://api.rtt.io) for a rare, unscheduled direct
+service to Tattenham Corner, and publishes a small dashboard (via GitHub
+Pages) showing whether one's been spotted, when the poller last ran, and
+the full sighting history.
 
 Runs entirely on GitHub Actions' cron, so nothing needs to stay on locally.
 
 ## How it works
 
 1. `notifier.py` fetches today's departure board for Queens Road Peckham
-   (`QRP`).
-2. For each service not already checked, it fetches the full calling
-   pattern and checks whether Tattenham Corner (`TAT`) appears in it.
-3. Matches trigger a Twilio message. Service IDs (keyed by service UID +
-   run date) are recorded in `state.json` so the same service never
-   triggers a second alert, and so already-checked non-matching services
-   aren't re-fetched on every run.
-4. The GitHub Actions workflow commits the updated `state.json` back to
-   the repo after each run, since Actions runners don't persist disk
+   (`QRP`) and checks each service's destination for Tattenham Corner
+   (TIPLOC `TATNHMC`). Tattenham Corner is a branch terminus, so any
+   service reaching it terminates there — checking the destination is
+   enough, no extra per-service lookup needed.
+2. New matches are appended to `docs/data.json`, along with the current
+   status ("🚂 Train spotted at HH:MM" / "No unscheduled train currently
+   spotted") and a `last_checked` timestamp.
+3. The GitHub Actions workflow commits the updated `docs/data.json` back
+   to the repo after each run, since Actions runners don't persist disk
    between runs.
-5. A second workflow sends a weekly heartbeat message (`weekly_status.py`)
-   so you get a periodic confirmation that the notifier is still running,
-   independent of whether a matching train has actually shown up. It does
-   a live RTT fetch and reports how many matches were spotted in the last
-   7 days, so a broken RTT/Twilio connection shows up even in a quiet week.
+4. GitHub Pages serves `docs/index.html`, which fetches `data.json` and
+   renders the status, the last-checked time (so you can confirm the
+   poller is actually running), and a history table of every sighting.
 
 ## Setup
 
@@ -33,37 +32,32 @@ Runs entirely on GitHub Actions' cron, so nothing needs to stay on locally.
 Register for a free account at [api.rtt.io](https://api.rtt.io) and note
 your API username and password (the API uses HTTP Basic Auth).
 
-### 2. Twilio credentials
-
-Set up a Twilio account with a number capable of sending SMS or WhatsApp
-messages (for WhatsApp, this can be the Twilio Sandbox for WhatsApp while
-testing). You'll need:
-
-- Account SID
-- Auth Token
-- A "from" number (e.g. `whatsapp:+14155238886` for WhatsApp, or `+1415...`
-  for plain SMS)
-- Your "to" number, in the same format (e.g. `whatsapp:+44...`)
-
-### 3. GitHub Actions secrets
+### 2. GitHub Actions secrets
 
 In the repo settings (`Settings → Secrets and variables → Actions`), add:
 
-| Secret               | Example                     |
-|----------------------|------------------------------|
-| `RTT_USERNAME`       | `rttapi_yourname`            |
-| `RTT_PASSWORD`       | `your-rtt-password`          |
-| `TWILIO_ACCOUNT_SID` | `ACxxxxxxxxxxxxxxxxxxxxxxxx` |
-| `TWILIO_AUTH_TOKEN`  | `your-twilio-auth-token`     |
-| `TWILIO_FROM_NUMBER` | `whatsapp:+14155238886`      |
-| `TWILIO_TO_NUMBER`   | `whatsapp:+447xxxxxxxxx`     |
+| Secret         | Example            |
+|----------------|---------------------|
+| `RTT_USERNAME` | `rttapi_yourname`   |
+| `RTT_PASSWORD` | `your-rtt-password` |
 
 No credentials are stored in the code or the repo — only in these secrets.
 
+### 3. GitHub Pages
+
+Go to `Settings → Pages` and set:
+- **Source**: Deploy from a branch
+- **Branch**: `main`, folder `/docs`
+- Save
+
+GitHub will publish the dashboard at `https://<your-username>.github.io/<repo-name>/`.
+It updates automatically on every push to `main` (including the
+automated `docs/data.json` commits from the poller).
+
 ### 4. Schedule
 
-The workflow (`.github/workflows/notify.yml`) polls every 15 minutes by
-default:
+The polling workflow (`.github/workflows/notify.yml`) runs every 15
+minutes by default:
 
 ```yaml
 schedule:
@@ -73,34 +67,35 @@ schedule:
 Adjust the cron expression to taste (it runs in UTC). You can also trigger
 a run manually from the Actions tab via `workflow_dispatch`.
 
-The weekly heartbeat (`.github/workflows/weekly-status.yml`) runs Sundays
-at 08:00 UTC:
+### 5. One-off historical backfill
 
-```yaml
-schedule:
-  - cron: "0 8 * * 0"
+`backfill_history.py` queries RTT's dated search endpoint for each day
+over the last ~6 months and seeds `docs/data.json` with any Tattenham
+Corner matches it finds. It's deliberately **not** part of the recurring
+schedule and never touches `last_checked`/`status` (those only reflect the
+live poller).
+
+Run it once via the Actions tab (**Backfill Historical Data (manual)** →
+Run workflow) — it reuses the same `RTT_USERNAME`/`RTT_PASSWORD` secrets.
+Re-running it later is safe; already-recorded matches are skipped.
+
+Alternatively, run it locally:
+
+```bash
+pip install -r requirements.txt
+export RTT_USERNAME=...
+export RTT_PASSWORD=...
+python backfill_history.py
 ```
-
-GitHub Actions cron only fires on its schedule going forward — it won't
-retroactively run for "today" just because the workflow was just added.
-To get today's confirmation immediately, open the **Actions** tab →
-**Weekly Notifier Status Check** → **Run workflow** to trigger it manually
-via `workflow_dispatch`; after that it'll run weekly on its own.
 
 ## Local testing
 
 ```bash
 pip install -r requirements.txt
-
 export RTT_USERNAME=...
 export RTT_PASSWORD=...
-export TWILIO_ACCOUNT_SID=...
-export TWILIO_AUTH_TOKEN=...
-export TWILIO_FROM_NUMBER=...
-export TWILIO_TO_NUMBER=...
-
 python notifier.py
 ```
 
-Delete/reset `state.json` (or remove specific keys from it) if you want to
-force a re-alert on a service you've already been notified about.
+`docs/data.json` is the single source of truth for the dashboard. Edit or
+reset it directly if you want to clear history or force a re-check.
