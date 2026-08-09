@@ -27,7 +27,10 @@ jobs:
           RTT_API_TOKEN: ${{ secrets.RTT_API_TOKEN }}
         run: python backfill_history.py
 
+      # always(): a partial backfill exits non-zero so the run is visibly
+      # incomplete, but the days that did succeed are still worth keeping.
       - name: Commit backfilled history
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
