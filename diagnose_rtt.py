@@ -18,6 +18,7 @@ Env vars (all optional - each probe is skipped if its creds are missing):
 import json
 import os
 import sys
+from datetime import date, timedelta
 
 import requests
 
@@ -30,6 +31,40 @@ TARGET_CODE = "TAT"  # Tattenham Corner
 # How much of a JSON body to show. Enough to see the schema, short enough
 # to stay readable in an Actions log.
 PREVIEW_CHARS = 4000
+
+
+def day_params(day: date, filter_to: str = None) -> dict:
+    """Whole-day window. The API defaults to only 60 minutes, so any
+    "what ran on this date" question has to say so explicitly."""
+    params = {
+        "code": ORIGIN_CODE,
+        "timeFrom": f"{day.isoformat()}T00:00:00Z",
+        "timeTo": f"{day.isoformat()}T23:59:59Z",
+    }
+    if filter_to:
+        params["filterTo"] = filter_to
+    return params
+
+
+def summarise_services(services: list) -> None:
+    """One line per service. Full-day windows return far too much JSON to
+    read raw, and the fields that matter for matching are few."""
+    print(f"len(services) = {len(services)}")
+    for svc in services[:40]:
+        meta = svc.get("scheduleMetadata", {})
+        dep = svc.get("temporalData", {}).get("departure", {})
+        when = dep.get("scheduleAdvertised") or dep.get("scheduleInternal") or "?"
+        dests = []
+        for d in svc.get("destination", []):
+            loc = d.get("location", {})
+            codes = ",".join(loc.get("longCodes", []))
+            dests.append(f"{loc.get('description')} [{codes}]")
+        print(
+            f"  {when}  {meta.get('uniqueIdentity')}  "
+            f"{meta.get('operator', {}).get('code')}  -> {'; '.join(dests)}"
+        )
+    if len(services) > 40:
+        print(f"  ... {len(services) - 40} more")
 
 
 def show(label: str, resp: requests.Response) -> None:
@@ -45,13 +80,18 @@ def show(label: str, resp: requests.Response) -> None:
         return
 
     body = resp.json()
-    if isinstance(body, dict):
-        print(f"Top-level keys: {list(body.keys())}")
-        for key in ("services", "locations"):
-            if isinstance(body.get(key), list):
-                print(f"len({key}) = {len(body[key])}")
-    print(f"Body (first {PREVIEW_CHARS} chars):")
-    print(json.dumps(body, indent=2)[:PREVIEW_CHARS])
+    if not isinstance(body, dict):
+        print(json.dumps(body, indent=2)[:PREVIEW_CHARS])
+        return
+
+    print(f"Top-level keys: {list(body.keys())}")
+    # A "services" key that is absent entirely means zero matches - the API
+    # omits it rather than returning an empty list.
+    if "services" in body:
+        summarise_services(body["services"])
+    else:
+        print("NO services key -> zero results for this query.")
+        print(f"query echo: {json.dumps(body.get('query'))[:800]}")
 
 
 def probe_legacy() -> None:
@@ -110,30 +150,34 @@ def probe_new() -> None:
     token = exchange_for_access_token(token)
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Plain board first: confirms auth works and shows the response schema.
-    # Then the same query with filterTo, which should make RTT do the
-    # "subsequently calls at Tattenham Corner" matching server-side.
+    today = date.today()
+    past = today - timedelta(days=7)
+
+    # The first run proved auth works but told us little else: filterTo=TAT
+    # returned no services, which is indistinguishable from filterTo being
+    # broken. So probe two things that actually discriminate:
+    #
+    #  1. CONTROL - filterTo against Battersea Park, a destination the
+    #     unfiltered board definitely serves. Services here means filterTo
+    #     works and an empty TAT result is a real "no train", not a bug.
+    #  2. HISTORY - a past date, since the access token reported no
+    #     entitlements and the backfill depends on historical queries.
     probes = [
-        ("new: board only", {"code": ORIGIN_CODE}),
-        ("new: board + filterTo", {"code": ORIGIN_CODE, "filterTo": TARGET_CODE}),
-        (
-            "new: board + filterTo + detailed",
-            {"code": ORIGIN_CODE, "filterTo": TARGET_CODE, "detailed": "true"},
-        ),
+        ("today, full day, unfiltered", day_params(today)),
+        ("today, full day, filterTo=BATRSPK (CONTROL)", day_params(today, "BATRSPK")),
+        ("today, full day, filterTo=TAT", day_params(today, TARGET_CODE)),
+        (f"past {past}, full day, unfiltered", day_params(past)),
+        (f"past {past}, full day, filterTo=TAT", day_params(past, TARGET_CODE)),
     ]
     for label, params in probes:
-        for path in ("/gb-nr/location", "/rtt/location"):
-            try:
-                resp = requests.get(
-                    f"{NEW_BASE}{path}", headers=headers, params=params, timeout=20
-                )
-            except requests.RequestException as exc:
-                print(f"\n--- {label} [{path}] ---\nRequest failed: {exc}")
-                continue
-            show(f"{label} [{path}]", resp)
-            # If the namespaced path works, no need to try the generic one.
-            if resp.status_code == 200:
-                break
+        try:
+            resp = requests.get(
+                f"{NEW_BASE}/gb-nr/location", headers=headers, params=params, timeout=30
+            )
+        except requests.RequestException as exc:
+            print(f"\n--- {label} ---\nRequest failed: {exc}")
+            continue
+        show(label, resp)
 
 
 def main() -> int:
