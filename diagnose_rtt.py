@@ -33,17 +33,10 @@ TARGET_CODE = "TAT"  # Tattenham Corner
 PREVIEW_CHARS = 4000
 
 
-def day_params(day: date, filter_to: str = None) -> dict:
-    """Whole-day window. The API defaults to only 60 minutes, so any
+def win(time_from: str, time_to: str) -> dict:
+    """A time-windowed query. The API defaults to only 60 minutes, so any
     "what ran on this date" question has to say so explicitly."""
-    params = {
-        "code": ORIGIN_CODE,
-        "timeFrom": f"{day.isoformat()}T00:00:00Z",
-        "timeTo": f"{day.isoformat()}T23:59:59Z",
-    }
-    if filter_to:
-        params["filterTo"] = filter_to
-    return params
+    return {"code": ORIGIN_CODE, "timeFrom": time_from, "timeTo": time_to}
 
 
 def summarise_services(services: list) -> None:
@@ -85,13 +78,20 @@ def show(label: str, resp: requests.Response) -> None:
         return
 
     print(f"Top-level keys: {list(body.keys())}")
+
+    # Check for an error payload first. A non-2xx is a rejected request, not
+    # an empty result, and conflating the two hides the reason.
+    if "error" in body or resp.status_code >= 400:
+        print(f"ERROR body: {json.dumps(body)[:800]}")
+        return
+
     # A "services" key that is absent entirely means zero matches - the API
     # omits it rather than returning an empty list.
     if "services" in body:
         summarise_services(body["services"])
     else:
         print("NO services key -> zero results for this query.")
-        print(f"query echo: {json.dumps(body.get('query'))[:800]}")
+        print(f"query echo: {json.dumps(body.get('query'))[:600]}")
 
 
 def probe_legacy() -> None:
@@ -153,21 +153,29 @@ def probe_new() -> None:
     today = date.today()
     past = today - timedelta(days=7)
 
-    # The first run proved auth works but told us little else: filterTo=TAT
-    # returned no services, which is indistinguishable from filterTo being
-    # broken. So probe two things that actually discriminate:
-    #
-    #  1. CONTROL - filterTo against Battersea Park, a destination the
-    #     unfiltered board definitely serves. Services here means filterTo
-    #     works and an empty TAT result is a real "no train", not a bug.
-    #  2. HISTORY - a past date, since the access token reported no
-    #     entitlements and the backfill depends on historical queries.
+    # Every timeFrom/timeTo query 400'd while the bare 60-minute default
+    # worked, so before anything else, isolate WHY: is the timestamp format
+    # wrong, or is a whole-day window simply too wide? Vary one at a time.
     probes = [
-        ("today, full day, unfiltered", day_params(today)),
-        ("today, full day, filterTo=BATRSPK (CONTROL)", day_params(today, "BATRSPK")),
-        ("today, full day, filterTo=TAT", day_params(today, TARGET_CODE)),
-        (f"past {past}, full day, unfiltered", day_params(past)),
-        (f"past {past}, full day, filterTo=TAT", day_params(past, TARGET_CODE)),
+        ("baseline: no time params (known good)", {"code": ORIGIN_CODE}),
+        # Format probes - all 1 hour wide, so only the format differs.
+        ("fmt Z", win(f"{today}T09:00:00Z", f"{today}T10:00:00Z")),
+        ("fmt +01:00 offset", win(f"{today}T09:00:00+01:00", f"{today}T10:00:00+01:00")),
+        ("fmt naive (no zone)", win(f"{today}T09:00:00", f"{today}T10:00:00")),
+        # timeWindow is the documented alternative to timeTo.
+        ("timeFrom + timeWindow=120", {
+            "code": ORIGIN_CODE, "timeFrom": f"{today}T09:00:00Z", "timeWindow": 120,
+        }),
+        # Width probes - fixed format, growing window, to find any cap.
+        ("width 6h", win(f"{today}T00:00:00Z", f"{today}T06:00:00Z")),
+        ("width 12h", win(f"{today}T00:00:00Z", f"{today}T12:00:00Z")),
+        ("width 24h", win(f"{today}T00:00:00Z", f"{today}T23:59:59Z")),
+        # History - does the token reach past dates at all?
+        (f"past {past}, 1h", win(f"{past}T09:00:00Z", f"{past}T10:00:00Z")),
+        # CONTROL - filterTo to a destination the board demonstrably serves.
+        # Services here prove filterTo works, so an empty TAT means no train.
+        ("filterTo=BATRSPK (CONTROL)", {"code": ORIGIN_CODE, "filterTo": "BATRSPK"}),
+        ("filterTo=TAT", {"code": ORIGIN_CODE, "filterTo": TARGET_CODE}),
     ]
     for label, params in probes:
         try:
