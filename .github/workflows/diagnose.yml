@@ -1,0 +1,30 @@
+name: Diagnose RTT API (manual)
+
+# Manual-only troubleshooting probe. Prints which RTT API this account can
+# authenticate against and what the response looks like, so the client can
+# be written against the real schema. Prints no credential values.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Probe RTT APIs
+        env:
+          RTT_USERNAME: ${{ secrets.RTT_USERNAME }}
+          RTT_PASSWORD: ${{ secrets.RTT_PASSWORD }}
+          RTT_API_TOKEN: ${{ secrets.RTT_API_TOKEN }}
+        run: python diagnose_rtt.py
