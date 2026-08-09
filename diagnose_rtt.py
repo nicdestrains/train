@@ -69,6 +69,37 @@ def probe_legacy() -> None:
         print(f"Request failed: {exc}")
 
 
+def exchange_for_access_token(refresh_token: str) -> str:
+    """RTT issues long-life *refresh* tokens that must be swapped for a
+    short-life access token before querying data endpoints. Using a refresh
+    token directly as the bearer returns "Invalid or expired token", so try
+    the exchange and fall back to using the token as-is."""
+    print("\n--- token exchange: GET /api/get_access_token ---")
+    try:
+        resp = requests.get(
+            f"{NEW_BASE}/api/get_access_token",
+            headers={"Authorization": f"Bearer {refresh_token}"},
+            timeout=20,
+        )
+    except requests.RequestException as exc:
+        print(f"Request failed: {exc}")
+        return refresh_token
+
+    print(f"Status: {resp.status_code}")
+    if resp.status_code != 200:
+        print(f"Body: {resp.text[:500]}")
+        print("-> Exchange failed; will retry queries with the raw token.")
+        return refresh_token
+
+    body = resp.json()
+    access = body.get("token")
+    # Never print the token itself - only proof we got one, and its metadata.
+    print(f"Got access token: {bool(access)} (len {len(access) if access else 0})")
+    print(f"validUntil:   {body.get('validUntil')}")
+    print(f"entitlements: {json.dumps(body.get('entitlements'))[:1500]}")
+    return access or refresh_token
+
+
 def probe_new() -> None:
     token = os.environ.get("RTT_API_TOKEN")
     print(f"\n=== NEW data.rtt.io (token set: {bool(token)}) ===")
@@ -76,6 +107,7 @@ def probe_new() -> None:
         print("Skipped - RTT_API_TOKEN not set.")
         return
 
+    token = exchange_for_access_token(token)
     headers = {"Authorization": f"Bearer {token}"}
 
     # Plain board first: confirms auth works and shows the response schema.
