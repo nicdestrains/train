@@ -1,9 +1,9 @@
 {
-  "last_checked": null,
+  "last_checked": "2026-08-09T08:55:23+00:00",
   "status": {
     "spotted_today": false,
-    "message": "No unscheduled train currently spotted",
-    "time": null
+    "time": null,
+    "message": "No unscheduled train currently spotted"
   },
   "history": []
 }
