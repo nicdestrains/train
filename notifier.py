@@ -1,32 +1,36 @@
 #!/usr/bin/env python3
 """
-Poll Realtime Trains for the Queens Road Peckham departure board and record
-any service calling at Tattenham Corner in data.json, which the GitHub
-Pages dashboard reads and displays.
+Poll Realtime Trains for services leaving Queens Road Peckham today that go
+on to call at Tattenham Corner, and record them in data.json, which the
+GitHub Pages dashboard reads and displays.
 
-Credentials are read from environment variables so they can be injected as
-GitHub Actions secrets:
+Credentials come from an environment variable so it can be injected as a
+GitHub Actions secret:
 
-  RTT_USERNAME  Realtime Trains API username (api.rtt.io)
-  RTT_PASSWORD  Realtime Trains API password
+  RTT_API_TOKEN  Realtime Trains API refresh token (from api-portal.rtt.io)
 """
 import sys
 from datetime import date, datetime, timezone
 
-import requests
-
 from data_store import load_data, save_data
-from rtt_client import departure_time, fetch_departure_board, matches_target, rtt_auth
+from rtt_client import (
+    RTTError,
+    fetch_matches,
+    get_access_token,
+    service_date,
+    service_id,
+    service_time,
+)
 
 
 def compute_status(history: list) -> dict:
     today = date.today().isoformat()
-    todays_times = sorted(h["time"] for h in history if h["date"] == today)
-    if todays_times:
+    todays = sorted(h["time"] for h in history if h["date"] == today)
+    if todays:
         return {
             "spotted_today": True,
-            "time": todays_times[0],
-            "message": f"\U0001f682 Train spotted at {todays_times[0]}",
+            "time": todays[0],
+            "message": f"\U0001f682 Train spotted at {todays[0]}",
         }
     return {
         "spotted_today": False,
@@ -36,41 +40,38 @@ def compute_status(history: list) -> dict:
 
 
 def main() -> int:
-    auth = rtt_auth()
     data = load_data()
-    existing_keys = {(h["date"], h["service_uid"]) for h in data["history"]}
+    known = {h["service_uid"] for h in data["history"]}
 
     try:
-        services = fetch_departure_board(auth)
-    except requests.RequestException as exc:
-        print(f"Failed to fetch departure board: {exc}", file=sys.stderr)
+        token = get_access_token()
+        services = fetch_matches(token, date.today())
+    except (RTTError, KeyError) as exc:
+        print(f"Failed to query RTT: {exc}", file=sys.stderr)
         return 1
 
     for service in services:
-        service_uid = service.get("serviceUid")
-        run_date = service.get("runDate")
-        if not service_uid or not run_date or not matches_target(service):
-            continue
-
-        key = (run_date, service_uid)
-        if key in existing_keys:
+        uid = service_id(service)
+        run_date = service_date(service)
+        if not uid or not run_date or uid in known:
             continue
 
         data["history"].append(
             {
                 "date": run_date,
-                "time": departure_time(service),
-                "service_uid": service_uid,
+                "time": service_time(service),
+                "service_uid": uid,
             }
         )
-        existing_keys.add(key)
-        print(f"New match: {service_uid} on {run_date}")
+        known.add(uid)
+        print(f"New match: {uid}")
 
     data["history"].sort(key=lambda h: (h["date"], h["time"]), reverse=True)
     data["status"] = compute_status(data["history"])
     data["last_checked"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     save_data(data)
+    print(f"Checked OK. {len(services)} match(es) today, {len(data['history'])} total.")
     return 0
 
 
