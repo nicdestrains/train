@@ -39,13 +39,17 @@ def main() -> int:
 
     today = date.today()
     found = 0
+    skipped = []
     for offset in range(BACKFILL_DAYS, -1, -1):
         day = today - timedelta(days=offset)
         try:
             services = fetch_matches(token, day)
         except RTTError as exc:
-            # Keep going: one bad day shouldn't lose the rest of the range.
-            print(f"{day}: query failed ({exc})", file=sys.stderr)
+            # Keep going so one bad day doesn't lose the rest of the range,
+            # but remember it - a day we never queried is not a day we know
+            # had no train.
+            print(f"{day}: SKIPPED - {exc}", flush=True)
+            skipped.append(day)
             continue
 
         new_today = 0
@@ -66,11 +70,28 @@ def main() -> int:
             found += 1
             new_today += 1
 
-        print(f"{day}: {len(services)} match(es), {new_today} new")
+        print(f"{day}: {len(services)} match(es), {new_today} new", flush=True)
 
+    # Save whatever was gathered even on a partial run - the days that did
+    # succeed are still worth keeping.
     data["history"].sort(key=lambda h: (h["date"], h["time"]), reverse=True)
     save_data(data)
-    print(f"Backfill complete. {found} new match(es) added to history.")
+
+    print(f"\n{found} new match(es) added to history.")
+    if skipped:
+        # Exiting non-zero matters: a partial backfill reported as success
+        # looks exactly like "there were no trains", which is the specific
+        # wrong conclusion this project keeps running into.
+        print(
+            f"INCOMPLETE: {len(skipped)} day(s) could not be queried: "
+            f"{', '.join(d.isoformat() for d in skipped)}\n"
+            "Re-run this workflow to retry them (already-recorded matches "
+            "are skipped, so it is safe).",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Backfill complete. All {BACKFILL_DAYS + 1} days queried.")
     return 0
 
 

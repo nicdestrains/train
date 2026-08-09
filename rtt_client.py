@@ -29,8 +29,12 @@ TARGET_CODE = "TAT"  # Tattenham Corner (long code TATNHMC)
 # the day at the wrong point during BST.
 UK = ZoneInfo("Europe/London")
 
-RATE_LIMIT_PAUSE = 2.0  # seconds between requests
-MAX_RETRIES = 4
+# Pacing. A 2s gap still tripped the limiter about 20 requests into a
+# backfill, so requests are spaced further apart and a 429 backs off for
+# considerably longer than it takes the limiter's window to roll over.
+RATE_LIMIT_PAUSE = 5.0  # seconds between requests
+RATE_LIMIT_BACKOFF = 15.0  # first wait after a 429, doubling thereafter
+MAX_RETRIES = 5
 
 
 class RTTError(RuntimeError):
@@ -55,7 +59,7 @@ def get_access_token() -> str:
 
 def _get(token: str, params: dict) -> dict:
     """GET with backoff, since the API 429s readily."""
-    delay = RATE_LIMIT_PAUSE
+    delay = RATE_LIMIT_BACKOFF
     for attempt in range(MAX_RETRIES):
         resp = requests.get(
             f"{BASE}{LOCATION_PATH}",
