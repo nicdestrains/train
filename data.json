@@ -1,9 +1,15 @@
 {
-  "last_checked": "2026-10-17T22:32:43+00:00",
+  "last_checked": "2026-10-18T00:23:07+00:00",
   "status": {
-    "spotted_today": false,
-    "time": null,
-    "message": "No unscheduled train currently spotted"
+    "spotted_today": true,
+    "time": "18:52",
+    "message": "\ud83d\ude82 Train spotted at 18:52"
   },
-  "history": []
+  "history": [
+    {
+      "date": "2026-10-18",
+      "time": "18:52",
+      "service_uid": "gb-nr:W28965:2026-10-18"
+    }
+  ]
 }
