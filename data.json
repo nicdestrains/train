@@ -1,11 +1,96 @@
 {
-  "last_checked": "2026-11-21T22:27:02+00:00",
+  "last_checked": "2026-11-22T02:33:41+00:00",
   "status": {
-    "spotted_today": false,
-    "time": null,
-    "message": "No unscheduled train currently spotted"
+    "spotted_today": true,
+    "time": "06:54",
+    "message": "\ud83d\ude82 Train spotted at 06:54"
   },
   "history": [
+    {
+      "date": "2026-11-22",
+      "time": "22:54",
+      "service_uid": "gb-nr:C56108:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "21:54",
+      "service_uid": "gb-nr:C56112:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "20:54",
+      "service_uid": "gb-nr:C56131:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "19:54",
+      "service_uid": "gb-nr:C18721:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "18:54",
+      "service_uid": "gb-nr:W28965:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "17:54",
+      "service_uid": "gb-nr:W28943:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "16:54",
+      "service_uid": "gb-nr:C18747:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "15:54",
+      "service_uid": "gb-nr:C56106:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "14:54",
+      "service_uid": "gb-nr:W28936:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "13:54",
+      "service_uid": "gb-nr:C56103:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "12:54",
+      "service_uid": "gb-nr:W28937:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "11:54",
+      "service_uid": "gb-nr:C56100:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "10:54",
+      "service_uid": "gb-nr:C18753:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "09:54",
+      "service_uid": "gb-nr:C18716:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "08:55",
+      "service_uid": "gb-nr:C18741:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "07:57",
+      "service_uid": "gb-nr:C56083:2026-11-22"
+    },
+    {
+      "date": "2026-11-22",
+      "time": "06:54",
+      "service_uid": "gb-nr:X24395:2026-11-22"
+    },
     {
       "date": "2026-11-15",
       "time": "23:27",
